@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { query } from '@/database';
+import { query, closePool } from '@/database';
 
 // Test user credentials
 const testUsers = [
@@ -107,6 +107,11 @@ async function seedDatabase() {
     }
     
     console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+    // Close the database pool before exiting
+    await closePool();
+    console.log('✅ Database pool closed');
+    process.exit(0);
 
   } catch (err) {
     console.error('❌ Seeding failed:', err);

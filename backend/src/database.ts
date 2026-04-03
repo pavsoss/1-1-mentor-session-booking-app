@@ -107,4 +107,8 @@ export async function healthCheck(): Promise<boolean> {
   }
 }
 
+export async function closePool(): Promise<void> {
+  await pool.end();
+}
+
 export default pool;
