@@ -28,7 +28,7 @@ const pool = new pg.Pool({
     
     // Test the API
     const client = axios.create({
-      baseURL: 'http://localhost:5000',
+      baseURL: process.env.PORT ? `http://localhost:${process.env.PORT}` : 'http://localhost:5001',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
