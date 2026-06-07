@@ -84,6 +84,20 @@ export default function DashboardPage() {
                 Search Mentors
               </GlowingButton>
             </Link>
+            {user?.role === 'mentor' && (
+              <Link href="/dashboard/analytics">
+                <GlowingButton variant="primary" className="text-xs md:text-sm py-1.5 md:py-2">
+                  📊 Analytics
+                </GlowingButton>
+              </Link>
+            )}
+            {user?.role === 'mentor' && (
+              <Link href="/dashboard/availability">
+                <GlowingButton variant="secondary" className="text-xs md:text-sm py-1.5 md:py-2">
+                  📅 Availability
+                </GlowingButton>
+              </Link>
+            )}
           </nav>
         </div>
       </header>
