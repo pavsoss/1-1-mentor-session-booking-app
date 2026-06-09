@@ -72,7 +72,7 @@ router.get('/available/:mentorId', async (req: Request, res: Response) => {
     );
 
     if (availabilityResult.rows.length === 0) {
-      return res.json({ success: true, slots: [] });
+      return res.json({ success: true, data: [], slots: [] });
     }
 
     // Get booked sessions for this date
@@ -98,7 +98,7 @@ router.get('/available/:mentorId', async (req: Request, res: Response) => {
       }
     }
 
-    res.json({ success: true, slots });
+    res.json({ success: true, data: slots, slots });
   } catch (error) {
     console.error('Error fetching available slots:', error);
     res.status(500).json({ error: 'Failed to fetch available slots' });
@@ -128,7 +128,7 @@ router.get('/calendar/:mentorId', async (req: Request, res: Response) => {
       color: row.status === 'completed' ? 'green' : row.status === 'cancelled' ? 'red' : 'blue',
     }));
 
-    res.json({ success: true, events });
+    res.json({ success: true, data: events, events });
   } catch (error) {
     console.error('Error fetching calendar:', error);
     res.status(500).json({ error: 'Failed to fetch calendar' });
