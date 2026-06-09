@@ -111,14 +111,30 @@ router.get('/calendar/:mentorId', async (req: Request, res: Response) => {
     const { mentorId } = req.params;
     const { startDate, endDate } = req.query;
 
-    const result = await db.query(
-      `SELECT id, title, scheduled_at, status 
-       FROM sessions 
-       WHERE mentor_id = $1 
-       AND scheduled_at BETWEEN $2 AND $3
-       ORDER BY scheduled_at`,
-      [mentorId, startDate, endDate]
-    );
+    // Determine user role to query correct sessions
+    const userResult = await db.query('SELECT role FROM users WHERE id = $1', [mentorId]);
+    const role = userResult.rows[0]?.role;
+
+    let result;
+    if (role === 'student') {
+      result = await db.query(
+        `SELECT id, title, scheduled_at, status 
+         FROM sessions 
+         WHERE student_id = $1 
+         AND scheduled_at BETWEEN $2 AND $3
+         ORDER BY scheduled_at`,
+        [mentorId, startDate, endDate]
+      );
+    } else {
+      result = await db.query(
+        `SELECT id, title, scheduled_at, status 
+         FROM sessions 
+         WHERE mentor_id = $1 
+         AND scheduled_at BETWEEN $2 AND $3
+         ORDER BY scheduled_at`,
+        [mentorId, startDate, endDate]
+      );
+    }
 
     const events = result.rows.map((row: any) => ({
       id: row.id,
@@ -128,7 +144,7 @@ router.get('/calendar/:mentorId', async (req: Request, res: Response) => {
       color: row.status === 'completed' ? 'green' : row.status === 'cancelled' ? 'red' : 'blue',
     }));
 
-    res.json({ success: true, events });
+    res.json({ success: true, data: events, events });
   } catch (error) {
     console.error('Error fetching calendar:', error);
     res.status(500).json({ error: 'Failed to fetch calendar' });
