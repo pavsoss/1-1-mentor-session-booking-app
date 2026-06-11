@@ -8,15 +8,53 @@ import { Session } from '@/types';
 import {
   GlowingButton,
   GlowingCard,
-  Avatar,
   Badge,
   LoadingSpinner,
 } from '@/components/ui/GlowingComponents';
 
+// Extended session type returned by /sessions/history/user/history
+type SessionWithDetails = Session & {
+  // Joined fields from the backend query
+  mentor_name?: string;
+  mentor_avatar?: string;
+  student_name?: string;
+  student_avatar?: string;
+  avg_rating?: number;
+  // Nested objects attached by the backend
+  rating?: {
+    id: string;
+    rating: number;
+    review?: string;
+  } | null;
+  feedback?: {
+    id: string;
+    feedback?: string;
+    difficulty_level?: string;
+    would_recommend?: boolean;
+  } | null;
+};
+
+function StarRating({ value }: { value: number }) {
+  return (
+    <div className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <span
+          key={star}
+          className={star <= value ? 'text-yellow-400' : 'text-gray-300 dark:text-gray-600'}
+        >
+          ★
+        </span>
+      ))}
+      <span className="ml-1 text-sm text-gray-500 dark:text-gray-400">({value}/5)</span>
+    </div>
+  );
+}
+
 export default function SessionHistoryPage() {
   const { user, isLoading: authLoading } = useAuth();
-  const [sessions, setSessions] = useState<Session[]>([]);
+  const [sessions, setSessions] = useState<SessionWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -24,13 +62,15 @@ export default function SessionHistoryPage() {
 
     const fetchHistory = async () => {
       setLoading(true);
+      setError('');
       try {
         const response = await apiClient.getSessionHistory();
-        if (response.success && response.data) {
-          setSessions(response.data);
-        }
-      } catch (err) {
+        // The backend wraps the array in { success: true, data: [...] }
+        const data = (response as any)?.data ?? (response as any);
+        setSessions(Array.isArray(data) ? data : []);
+      } catch (err: any) {
         console.error('Error fetching session history:', err);
+        setError('Failed to load session history. Please try again.');
       } finally {
         setLoading(false);
       }
@@ -62,7 +102,14 @@ export default function SessionHistoryPage() {
       </header>
 
       <main className="max-w-5xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-6 md:py-8">
-        {sessions.length === 0 ? (
+        {/* Error banner */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-900/20 border border-red-700/50 rounded-lg text-red-400 text-sm">
+            {error}
+          </div>
+        )}
+
+        {sessions.length === 0 && !error ? (
           <GlowingCard glow="yellow" className="text-center py-12">
             <p className="text-yellow-600 dark:text-yellow-400 text-lg mb-4">No sessions yet</p>
             <p className="text-gray-600 dark:text-gray-400 mb-6">
@@ -78,96 +125,154 @@ export default function SessionHistoryPage() {
           </GlowingCard>
         ) : (
           <div className="space-y-4">
-            {sessions.map((session) => (
-              <div
-                key={session.id}
-                onClick={() => setExpandedId(expandedId === session.id ? null : session.id)}
-                className="cursor-pointer"
-              >
-              <GlowingCard
-                glow="purple"
-                className="p-4 md:p-6 hover:shadow-glow-purple transition-all"
-              >
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                  <div className="flex-1">
-                    <h3 className="text-lg md:text-xl font-bold text-gray-900 dark:text-white">{session.title}</h3>
-                    <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">{session.description}</p>
-                    <div className="flex flex-wrap gap-2 mt-3">
-                      <Badge color={session.status === 'completed' ? 'green' : 'purple'}>
-                        {session.status}
-                      </Badge>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        {new Date(session.created_at).toLocaleDateString()}
-                      </span>
-                    </div>
-                  </div>
+            {sessions.map((session) => {
+              const isExpanded = expandedId === session.id;
+              const otherPartyName =
+                user?.role === 'mentor' ? session.student_name : session.mentor_name;
 
-                  <div className="flex gap-2">
-                    <Link href={`/session/${session.id}`}>
-                      <GlowingButton variant="secondary" className="text-sm py-2">
-                        View
-                      </GlowingButton>
-                    </Link>
-                  </div>
-                </div>
-
-                {/* Expanded Details */}
-                {expandedId === session.id && (
-                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700/30 space-y-3">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                      <div>
-                        <p className="text-gray-500 dark:text-gray-400">Language</p>
-                        <p className="text-gray-900 dark:text-white font-medium">{session.code_language}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500 dark:text-gray-400">Duration</p>
-                        <p className="text-gray-900 dark:text-white font-medium">{session.duration_minutes} min</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500 dark:text-gray-400">Topic</p>
-                        <p className="text-gray-900 dark:text-white font-medium">{session.topic || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500 dark:text-gray-400">Participants</p>
-                        <p className="text-gray-900 dark:text-white font-medium">2</p>
-                      </div>
-                    </div>
-
-                    {session.status === 'completed' && (
-                      <div className="bg-gray-100/50 dark:bg-dark-800/30 p-3 rounded-lg border border-gray-200/50 dark:border-gray-700/20 space-y-2">
-                        <p className="text-gray-900 dark:text-white font-medium">Feedback & Rating</p>
-                        {(session as any).rating && (
-                          <div className="text-sm">
-                            <span className="text-yellow-500 font-bold">★ {(session as any).rating.rating}</span>
-                            {(session as any).rating.review && (
-                              <p className="text-gray-700 dark:text-gray-300 italic mt-1">
-                                "{(session as any).rating.review}"
-                              </p>
-                            )}
-                          </div>
+              return (
+                <div
+                  key={session.id}
+                  onClick={() => setExpandedId(isExpanded ? null : session.id)}
+                  className="cursor-pointer"
+                >
+                  <GlowingCard
+                    glow="purple"
+                    className="p-4 md:p-6 hover:shadow-glow-purple transition-all"
+                  >
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                      <div className="flex-1">
+                        <h3 className="text-lg md:text-xl font-bold text-gray-900 dark:text-white">
+                          {session.title}
+                        </h3>
+                        {session.description && (
+                          <p className="text-gray-600 dark:text-gray-400 text-sm mt-1 line-clamp-2">
+                            {session.description}
+                          </p>
                         )}
-                        {(session as any).feedback && (
-                          <div className="text-sm text-gray-700 dark:text-gray-300 mt-2">
-                            {(session as any).feedback.feedback && (
-                              <p>Feedback: {(session as any).feedback.feedback}</p>
-                            )}
-                            {(session as any).feedback.difficulty_level && (
-                              <p className="text-xs text-gray-500 mt-1">
-                                Difficulty: {(session as any).feedback.difficulty_level}
-                              </p>
-                            )}
+                        <div className="flex flex-wrap items-center gap-2 mt-3">
+                          <Badge color={session.status === 'completed' ? 'green' : 'purple'}>
+                            {session.status}
+                          </Badge>
+                          {otherPartyName && (
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              {user?.role === 'mentor' ? 'Student:' : 'Mentor:'}{' '}
+                              <span className="font-medium text-gray-700 dark:text-gray-300">
+                                {otherPartyName}
+                              </span>
+                            </span>
+                          )}
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            {session.scheduled_at
+                              ? new Date(session.scheduled_at).toLocaleDateString(undefined, {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric',
+                                })
+                              : new Date(session.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+                        <Link href={`/session/${session.id}`}>
+                          <GlowingButton variant="secondary" className="text-sm py-2">
+                            View
+                          </GlowingButton>
+                        </Link>
+                      </div>
+                    </div>
+
+                    {/* Expanded Details */}
+                    {isExpanded && (
+                      <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700/30 space-y-4">
+                        {/* Session metadata grid */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                          <div>
+                            <p className="text-gray-500 dark:text-gray-400">Language</p>
+                            <p className="text-gray-900 dark:text-white font-medium">
+                              {session.code_language || session.language}
+                            </p>
                           </div>
-                        )}
-                        {!(session as any).rating && !(session as any).feedback && (
-                          <p className="text-gray-700 dark:text-gray-300 text-sm">No feedback or rating yet</p>
+                          <div>
+                            <p className="text-gray-500 dark:text-gray-400">Duration</p>
+                            <p className="text-gray-900 dark:text-white font-medium">
+                              {session.duration_minutes ?? 60} min
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-gray-500 dark:text-gray-400">Topic</p>
+                            <p className="text-gray-900 dark:text-white font-medium">
+                              {session.topic || 'N/A'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-gray-500 dark:text-gray-400">Participants</p>
+                            <p className="text-gray-900 dark:text-white font-medium">2</p>
+                          </div>
+                        </div>
+
+                        {/* Rating & Feedback (completed sessions only) */}
+                        {session.status === 'completed' && (
+                          <div className="bg-gray-100/50 dark:bg-dark-800/30 p-4 rounded-lg border border-gray-200/50 dark:border-gray-700/20 space-y-3">
+                            {/* Rating */}
+                            <div>
+                              <p className="text-gray-900 dark:text-white font-medium mb-1">Rating</p>
+                              {session.rating ? (
+                                <div className="space-y-1">
+                                  <StarRating value={session.rating.rating} />
+                                  {session.rating.review && (
+                                    <p className="text-gray-700 dark:text-gray-300 text-sm italic">
+                                      &ldquo;{session.rating.review}&rdquo;
+                                    </p>
+                                  )}
+                                </div>
+                              ) : (
+                                <p className="text-gray-500 dark:text-gray-400 text-sm">No rating yet</p>
+                              )}
+                            </div>
+
+                            {/* Feedback */}
+                            <div>
+                              <p className="text-gray-900 dark:text-white font-medium mb-1">Feedback</p>
+                              {session.feedback ? (
+                                <div className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
+                                  {session.feedback.feedback && (
+                                    <p>&ldquo;{session.feedback.feedback}&rdquo;</p>
+                                  )}
+                                  {session.feedback.difficulty_level && (
+                                    <p className="text-gray-500 dark:text-gray-400">
+                                      Difficulty: {session.feedback.difficulty_level}
+                                    </p>
+                                  )}
+                                  {session.feedback.would_recommend !== undefined &&
+                                    session.feedback.would_recommend !== null && (
+                                      <p className="text-gray-500 dark:text-gray-400">
+                                        Would recommend:{' '}
+                                        <span
+                                          className={
+                                            session.feedback.would_recommend
+                                              ? 'text-green-500'
+                                              : 'text-red-400'
+                                          }
+                                        >
+                                          {session.feedback.would_recommend ? 'Yes' : 'No'}
+                                        </span>
+                                      </p>
+                                    )}
+                                </div>
+                              ) : (
+                                <p className="text-gray-500 dark:text-gray-400 text-sm">No feedback yet</p>
+                              )}
+                            </div>
+                          </div>
                         )}
                       </div>
                     )}
-                  </div>
-                )}
-              </GlowingCard>
-              </div>
-            ))}
+                  </GlowingCard>
+                </div>
+              );
+            })}
           </div>
         )}
       </main>

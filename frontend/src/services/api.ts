@@ -176,7 +176,7 @@ class ApiClient {
 
   // Session History endpoints
   async getSessionHistory(): Promise<ApiResponse<any[]>> {
-    return this.client.get('/sessions/history');
+    return this.client.get('/sessions/history/user/history');
   }
 
   async getMentorSessions(mentorId: string): Promise<ApiResponse<any[]>> {
