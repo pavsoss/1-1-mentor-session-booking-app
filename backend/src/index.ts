@@ -23,7 +23,7 @@ import adminRoutes from './routes/admin';
 import analyticsRoutes from './routes/analytics';
 import { setupSocketHandlers } from './socket/handlers';
 import { setupRealtimeHandlers } from './socket/realtimeHandlers';
-import { startReminderService } from './services/reminderService';
+import { startReminderService, setSocketIO as setReminderSocketIO } from './services/reminderService';
 
 const app: Express = express();
 const httpServer = createServer(app);
@@ -53,6 +53,7 @@ const io = new SocketIOServer(httpServer, {
 // Set Socket.io instance for routes that need it
 setSessionSocketIO(io);
 setCodeSocketIO(io);
+setReminderSocketIO(io);
 
 // Socket.IO authentication middleware
 io.use((socket, next) => {
