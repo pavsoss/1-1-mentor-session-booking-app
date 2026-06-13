@@ -1,23 +1,49 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { LoadingSpinner } from '@/components/ui/GlowingComponents';
+import { socketService } from '@/services/socket';
+import { ReminderToast } from '@/components/ReminderToast';
+import { SocketEvents } from '@/types';
 
 export default function ProtectedLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, token } = useAuth();
   const router = useRouter();
+  const [reminder, setReminder] = useState<{ title: string; message: string; sessionId: string } | null>(null);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       router.push('/login');
     }
   }, [isAuthenticated, isLoading, router]);
+
+  // Listen for real-time session reminder notifications
+  useEffect(() => {
+    if (!isAuthenticated || !token) return;
+
+    if (!socketService.isConnected()) {
+      socketService.connect(token);
+    }
+
+    const handleNotification = (data: SocketEvents['notification:received']) => {
+      if (data.type === 'session_reminder' && data.data?.sessionId) {
+        setReminder({
+          title: data.title,
+          message: data.message,
+          sessionId: data.data.sessionId,
+        });
+      }
+    };
+
+    socketService.on('notification:received', handleNotification);
+    return () => socketService.off('notification:received', handleNotification);
+  }, [isAuthenticated, token]);
 
   if (isLoading) {
     return (
@@ -27,5 +53,19 @@ export default function ProtectedLayout({
     );
   }
 
-  return isAuthenticated ? children : null;
+  if (!isAuthenticated) return null;
+
+  return (
+    <>
+      {children}
+      {reminder && (
+        <ReminderToast
+          title={reminder.title}
+          message={reminder.message}
+          sessionId={reminder.sessionId}
+          onDismiss={() => setReminder(null)}
+        />
+      )}
+    </>
+  );
 }

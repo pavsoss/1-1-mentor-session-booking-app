@@ -73,7 +73,7 @@ class SocketService {
       }
 
       // Join this user's personal notification room so server-side
-      // notification:received events (e.g. session ended) reach them
+      // notification:received events (e.g. session reminders, session ended) reach them
       const user = useAuthStore.getState().user;
       if (user?.id) {
         this.socket?.emit('user:join', user.id);
