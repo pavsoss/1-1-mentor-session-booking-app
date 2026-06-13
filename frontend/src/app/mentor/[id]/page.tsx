@@ -13,6 +13,7 @@ import {
   Avatar,
   LoadingSpinner,
 } from '@/components/ui/GlowingComponents';
+import { RatingsSection } from '@/components/RatingsSection';
 
 export default function MentorProfilePage() {
   const params = useParams();
@@ -20,6 +21,7 @@ export default function MentorProfilePage() {
   const { user, isLoading: authLoading } = useAuth();
   const [mentor, setMentor] = useState<User | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [ratings, setRatings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -46,6 +48,15 @@ export default function MentorProfilePage() {
         } catch (err) {
           console.warn('Could not fetch available sessions:', err);
           setSessions([]);
+        }
+
+        // Fetch ratings and reviews for this mentor
+        try {
+          const ratingsRes = await apiClient.getRatings(mentorId);
+          setRatings(ratingsRes.data || []);
+        } catch (err) {
+          console.warn('Could not fetch ratings:', err);
+          setRatings([]);
         }
       } catch (err) {
         console.error('Error fetching mentor data:', err);
@@ -191,6 +202,17 @@ export default function MentorProfilePage() {
               ))}
             </div>
           )}
+        </div>
+
+        {/* Reviews */}
+        <div className="mt-8">
+          <RatingsSection
+            mentorId={mentor.id}
+            mentorName={mentor.name}
+            ratings={ratings}
+            avgRating={mentor.avg_rating || 0}
+            totalReviews={mentor.total_sessions || 0}
+          />
         </div>
       </main>
     </div>

@@ -8,7 +8,7 @@ const router = Router();
 router.get('/mentors', async (req: AuthRequest, res: Response) => {
   try {
     const mentors = await query(
-      'SELECT id, email, name, avatar_url, bio, role FROM users WHERE role = $1 ORDER BY created_at DESC LIMIT 100',
+      'SELECT id, email, name, avatar_url, bio, role, avg_rating::float8 as avg_rating, total_sessions FROM users WHERE role = $1 ORDER BY created_at DESC LIMIT 100',
       ['mentor']
     );
 
@@ -68,9 +68,10 @@ router.put('/profile', authMiddleware, async (req: AuthRequest, res: Response) =
 // Get user profile by ID
 router.get('/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const user = await queryOne('SELECT id, email, name, role, avatar_url, bio, verified FROM users WHERE id = $1', [
-      req.params.id,
-    ]);
+    const user = await queryOne(
+      'SELECT id, email, name, role, avatar_url, bio, verified, avg_rating::float8 as avg_rating, total_sessions FROM users WHERE id = $1',
+      [req.params.id]
+    );
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });

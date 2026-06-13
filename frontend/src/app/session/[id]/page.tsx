@@ -10,6 +10,7 @@ import { webrtcDiagnostics } from '@/services/webrtcDiagnostics';
 import { useSessionStore, useEditorStore, useVideoStore, useAuthStore } from '@/store';
 import { GlowingButton, GlowingCard, Badge, Avatar } from '@/components/ui/GlowingComponents';
 import { CollaborativeEditor } from '@/components/CollaborativeEditor';
+import { SessionRatingModal } from '@/components/SessionRatingModal';
 import dynamic from 'next/dynamic';
 
 // Configure Monaco Editor - disable workers to avoid network errors
@@ -49,6 +50,8 @@ export default function SessionPage() {
   const [loading, setLoading] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [cameraError, setCameraError] = useState<string>('');
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [ratingMentorName, setRatingMentorName] = useState('your mentor');
   const messageEndRef = useRef<HTMLDivElement>(null);
   const listenerRef = useRef<any>(null);
 
@@ -505,6 +508,25 @@ export default function SessionPage() {
     }
   }, [currentUser, sessionId]);
 
+  // If the session is completed and the current user is the student who
+  // hasn't reviewed it yet, prompt them with the post-session rating modal.
+  const checkSessionCompletion = async (sessionData: any) => {
+    const user = useAuthStore.getState().user;
+    if (!sessionData || sessionData.status !== 'completed') return;
+    if (!user || user.role !== 'student' || sessionData.student_id !== user.id) return;
+
+    try {
+      const ratingRes = await apiClient.getSessionRating(sessionId);
+      if (!ratingRes.data) {
+        const mentorRes = await apiClient.getUser(sessionData.mentor_id);
+        setRatingMentorName(mentorRes.data?.name || 'your mentor');
+        setShowRatingModal(true);
+      }
+    } catch (err) {
+      console.error('Error checking session rating:', err);
+    }
+  };
+
   useEffect(() => {
     const fetchSession = async () => {
       setLoading(true);
@@ -513,6 +535,7 @@ export default function SessionPage() {
         if (res.data) {
           setSession(res.data as Session);
           setCurrentSession(res.data);
+          checkSessionCompletion(res.data);
         }
 
         const messagesRes = await apiClient.getMessages(sessionId);
@@ -639,12 +662,26 @@ export default function SessionPage() {
       }
     };
 
+    // Handler for the "session ended" notification - lets the student see the
+    // rating modal in real time if the mentor ends the session first
+    const handleSessionEndNotification = (notification: any) => {
+      if (notification?.type === 'session_end' && notification?.data?.sessionId === sessionId) {
+        apiClient.getSession(sessionId).then((res) => {
+          if (res.data) {
+            setSession(res.data as Session);
+            checkSessionCompletion(res.data);
+          }
+        });
+      }
+    };
+
     // Register listeners FIRST before joining session
     socketService.on('code:update', handleCodeUpdate);
     socketService.on('message:receive', handleMessageReceive);
     socketService.on('code:execution:result', handleExecutionResult);
     socketService.on('screen:started', handleScreenShareStarted);
     socketService.on('screen:stopped', handleScreenShareStopped);
+    socketService.on('notification:received', handleSessionEndNotification);
 
     // Wait for socket to connect, then join session
     const joinWithRetry = async () => {
@@ -676,6 +713,7 @@ export default function SessionPage() {
         socketService.off('code:execution:result', handleExecutionResult);
         socketService.off('screen:started', handleScreenShareStarted);
         socketService.off('screen:stopped', handleScreenShareStopped);
+        socketService.off('notification:received', handleSessionEndNotification);
       },
     };
 
@@ -971,7 +1009,7 @@ export default function SessionPage() {
   const handleEndSession = async () => {
     try {
       await apiClient.endSession(sessionId);
-      socketService.endSession(sessionId);
+      socketService.endSession(sessionId, session?.mentor_id, session?.student_id);
       // Navigate back to dashboard
       window.location.href = '/dashboard';
     } catch (err) {
@@ -1343,6 +1381,16 @@ export default function SessionPage() {
           <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2">Output:</p>
           <pre className="text-xs md:text-sm text-green-700 dark:text-green-400 font-mono whitespace-pre-wrap break-words">{executionOutput}</pre>
         </div>
+      )}
+
+      {/* Post-session rating prompt (student view only) */}
+      {showRatingModal && (
+        <SessionRatingModal
+          sessionId={sessionId}
+          mentorName={ratingMentorName}
+          onSubmit={() => setShowRatingModal(false)}
+          onSkip={() => setShowRatingModal(false)}
+        />
       )}
     </div>
   );

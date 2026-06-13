@@ -8,22 +8,48 @@ const router = Router();
 // Create rating/review for a session
 router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const { session_id, mentor_id, rating, review } = req.body;
+    const { session_id, rating, review, comment } = req.body;
+    const reviewText = review ?? comment ?? null;
     const student_id = req.user?.id;
 
-    if (!session_id || !mentor_id || !rating || (rating < 1 || rating > 5)) {
+    if (!session_id || !rating || (rating < 1 || rating > 5)) {
       return res.status(400).json({ error: 'Invalid rating data' });
     }
 
+    if (reviewText && reviewText.length > 300) {
+      return res.status(400).json({ error: 'Review must be 300 characters or less' });
+    }
+
+    const session = await queryOne('SELECT * FROM sessions WHERE id = $1', [session_id]);
+
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    if (session.status !== 'completed') {
+      return res.status(400).json({ error: 'Session must be completed before it can be reviewed' });
+    }
+
+    if (session.student_id !== student_id) {
+      return res.status(403).json({ error: 'Only the student in this session can leave a review' });
+    }
+
+    const mentor_id = session.mentor_id;
     const ratingId = uuidv4();
     const now = new Date().toISOString();
 
-    // Insert rating
-    await query(
-      `INSERT INTO ratings (id, session_id, mentor_id, student_id, rating, review, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [ratingId, session_id, mentor_id, student_id, rating, review || null, now]
-    );
+    try {
+      await query(
+        `INSERT INTO ratings (id, session_id, mentor_id, student_id, rating, review, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [ratingId, session_id, mentor_id, student_id, rating, reviewText, now]
+      );
+    } catch (err: any) {
+      if (err.code === '23505') {
+        return res.status(409).json({ error: 'You have already reviewed this session' });
+      }
+      throw err;
+    }
 
     // Update mentor's average rating
     const avgRatingResult = await queryOne(
@@ -41,7 +67,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 
     const newRating = await queryOne('SELECT * FROM ratings WHERE id = $1', [ratingId]);
 
-    res.json({
+    res.status(201).json({
       success: true,
       data: newRating,
     });
@@ -54,19 +80,29 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 // Shared ratings getter handler
 const getRatingsHandler = async (req: AuthRequest, res: Response) => {
   try {
+    const mentorId = req.params.mentor_id;
+
     const ratings = await query(
-      `SELECT r.*, u.name as student_name, u.avatar_url
+      `SELECT r.*, u.name as student_name, u.avatar_url as student_avatar
        FROM ratings r
        JOIN users u ON r.student_id = u.id
        WHERE r.mentor_id = $1
        ORDER BY r.created_at DESC
-       LIMIT 50`,
-      [req.params.mentor_id]
+       LIMIT 10`,
+      [mentorId]
+    );
+
+    const summary = await queryOne(
+      `SELECT COALESCE(AVG(rating)::numeric(3,2), 0) as avg_rating, COUNT(*) as total_reviews
+       FROM ratings WHERE mentor_id = $1`,
+      [mentorId]
     );
 
     res.json({
       success: true,
       data: ratings.rows,
+      avg_rating: Number(summary?.avg_rating || 0),
+      total_reviews: Number(summary?.total_reviews || 0),
     });
   } catch (err) {
     console.error('Get ratings error:', err);
@@ -99,16 +135,21 @@ router.get('/session/:session_id', async (req: AuthRequest, res: Response) => {
 // Update rating
 router.put('/:rating_id', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const { rating, review } = req.body;
+    const { rating, review, comment } = req.body;
+    const reviewText = review ?? comment ?? null;
     const ratingId = req.params.rating_id;
 
     if (!rating || (rating < 1 || rating > 5)) {
       return res.status(400).json({ error: 'Invalid rating' });
     }
 
+    if (reviewText && reviewText.length > 300) {
+      return res.status(400).json({ error: 'Review must be 300 characters or less' });
+    }
+
     await query(
       'UPDATE ratings SET rating = $1, review = $2 WHERE id = $3',
-      [rating, review || null, ratingId]
+      [rating, reviewText, ratingId]
     );
 
     const updated = await queryOne('SELECT * FROM ratings WHERE id = $1', [ratingId]);

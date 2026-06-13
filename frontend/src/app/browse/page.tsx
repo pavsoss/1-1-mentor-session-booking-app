@@ -141,6 +141,12 @@ export default function BrowsePage() {
                         <div className="flex-1 min-w-0">
                           <h3 className="font-semibold text-gray-900 dark:text-white truncate">{mentor.name}</h3>
                           <p className="text-xs text-gray-600 dark:text-gray-400 truncate">{mentor.bio}</p>
+                          <div className="flex items-center gap-1 mt-1 text-xs">
+                            <span className="text-accent-500">⭐ {(mentor.avg_rating || 0).toFixed(1)}</span>
+                            <span className="text-gray-500 dark:text-gray-400">
+                              ({mentor.total_sessions || 0} review{mentor.total_sessions === 1 ? '' : 's'})
+                            </span>
+                          </div>
                         </div>
                       </div>
                       <Link

@@ -11,6 +11,8 @@ export interface User {
   verified: boolean;
   created_at: string;
   updated_at: string;
+  avg_rating?: number;
+  total_sessions?: number;
 }
 
 export interface UserProfile extends User {
@@ -144,6 +146,14 @@ export interface SocketEvents {
   'session:left': { user_id: string };
   'session:end': { sessionId: string };
   'session:ended': void;
+
+  // Notification Events
+  'notification:received': {
+    type: string;
+    title: string;
+    message: string;
+    data?: Record<string, any>;
+  };
 }
 
 // Auth Types
